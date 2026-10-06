@@ -100,3 +100,87 @@ def predict_movie(movie: MovieInput):
             status_code=500,
             detail=str(e)
         )
+@app.get("/feature-importance")
+def get_feature_importance():
+    try:
+        # Get transformed feature names
+        feature_names = (
+            model
+            .named_steps["preprocessor"]
+            .get_feature_names_out()
+        )
+
+        # Get Gradient Boosting feature importances
+        importances = (
+            model
+            .named_steps["model"]
+            .feature_importances_
+        )
+
+        # Aggregate one-hot encoded features back
+        # into the original 15 model inputs
+        aggregated = {}
+
+        for feature_name, importance in zip(
+            feature_names,
+            importances
+        ):
+            # Numeric features
+            if feature_name.startswith("num__"):
+                original_name = feature_name.replace(
+                    "num__",
+                    ""
+                )
+
+            # Primary genre one-hot columns
+            elif feature_name.startswith(
+                "cat__primary_genre_"
+            ):
+                original_name = "primary_genre"
+
+            # English one-hot columns
+            elif feature_name.startswith(
+                "cat__is_english_"
+            ):
+                original_name = "is_english"
+
+            else:
+                original_name = feature_name
+
+            aggregated[original_name] = (
+                aggregated.get(original_name, 0)
+                + float(importance)
+            )
+
+        # Convert to percentages
+        results = [
+            {
+                "feature": feature,
+                "importance": round(
+                    importance,
+                    6
+                ),
+                "importance_percent": round(
+                    importance * 100,
+                    2
+                )
+            }
+            for feature, importance
+            in aggregated.items()
+        ]
+
+        # Highest importance first
+        results.sort(
+            key=lambda x: x["importance"],
+            reverse=True
+        )
+
+        return {
+            "feature_importance": results
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
